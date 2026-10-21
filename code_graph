@@ -10,6 +10,7 @@ var endDate = ee.Date.fromYMD(endYear + 1, 1, 1);
 
 var filtered = modis
   .filter(ee.Filter.date(startDate, endDate));
+  .filterBounds(geometry);
   
 var bitwiseExtract = function(input, fromBit, toBit) {
   var maskSize = ee.Number(1).add(toBit).subtract(fromBit);
@@ -27,6 +28,7 @@ var maskSnowAndClouds = function(image) {
 };
 
 var ndviScaled = function(image) {
+  var ndvi = image.select('NDVI');
   var scaled = image.divide(10000);
   return scaled.copyProperties(
   image, ['system:index', 'system:time_start']);
@@ -37,16 +39,24 @@ var processedCol = filtered
   .map(ndviScaled)
   .select('NDVI');
 
+// ВИПРАВЛЕННЯ ПОМИЛКИ ПРОЕКЦІЇ:
+// 1. Беремо перше зображення з нашої колекції, щоб дізнатися його рідну проекцію
+var modisProjection = modis.first().select('NDVI').projection();
+
+// 2. Трансформуємо ваш намальований полігон у рідну проекцію MODIS (SR-ORG:6974)
+var geometryProjected = geometry.transform(modisProjection, 1);
+
 var chart = ui.Chart.image.series({
   imageCollection: processedCol,
-  region: geometry,
+  region: geometryProjected, // Використовуємо трансформовану геометрію тут!
   reducer: ee.Reducer.mean(),
   scale: 250
 }).setOptions({
   interpolateNulls: true,
   lineWidth: 1,
   pointSize: 2,
-  title: 'NDVI Time-Series',
-  vAxis: {title: 'NDVI'},
+  title: 'NDVI Time-Series (2000-2025)',
+  vAxis: {title: 'Date'},
+  colors: ['#228B22']
 });
 print(chart);
